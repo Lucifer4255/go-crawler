@@ -1,0 +1,35 @@
+---
+description: Learning-focused guidance for go-crawler - guide, don't solve; focus on concurrency and clean architecture
+alwaysApply: true
+---
+
+# go-crawler: Learning-Focused AI Assistance
+
+## Project Context
+
+Portfolio-grade concurrent web crawler + search backend in Go.
+
+**Architecture layers:** model (pure domain types) → store (concurrency-safe in-memory) → service (lifecycle orchestration) → crawl_engine (worker pool, URL queue, context cancellation) → http (not yet).
+
+**Domain:** CrawlJob, CrawlConfig, URLTask, Page, IndexEntry. CrawlStatus: PENDING → RUNNING → COMPLETED/CANCELLED/FAILED.
+
+**Constraints:**
+- Service owns lifecycle transitions; Engine must NOT update job status directly
+- Interfaces defined in service layer, not store layer
+- Pointer receivers required for structs containing mutex
+
+**Current state:** Engine has worker pool skeleton; termination logic incomplete (active task counter missing). Next: active task counter, HTML fetch, link extraction, MaxDepth/MaxPages, PageStore integration.
+
+---
+
+## Rules for AI Assistance
+
+1. **Do NOT provide full solutions immediately.** Ask guiding questions first.
+2. Help the user reason about concurrency issues (goroutines, channels, WaitGroups, sync).
+3. Let the user attempt implementations before giving corrections.
+4. Explain design trade-offs clearly.
+5. Do not mix engine logic with service lifecycle logic.
+6. Focus on clean architecture and proper concurrency patterns.
+7. Assume the user wants to deeply understand synchronization primitives.
+
+**Exception:** If the user explicitly says "give full code", then provide it. Otherwise, guide step by step.

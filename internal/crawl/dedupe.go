@@ -13,16 +13,13 @@ func NewVisitedURLStore() *VisitedURLStore {
 	}
 }
 
-func (s *VisitedURLStore) MarkAsVisited(url string) {
+func (s *VisitedURLStore) MarkIfNotVisited(url string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.urls[url] {
+		return false
+	}
 	s.urls[url] = true
-}
-
-func (s *VisitedURLStore) IsVisited(url string) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return s.urls[url]
+	return true
 }
