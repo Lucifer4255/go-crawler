@@ -52,16 +52,19 @@ func (s *JobStore) UpdateJobStatus(id string, status model.CrawlStatus, errMsg s
 	return nil
 }
 
-func (s *JobStore) IncrementPagesCrawled(id string) error {
+func (s *JobStore) TryIncrementPagesCrawled(id string, max int) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	job, ok := s.jobs[id]
 	if !ok {
-		return errors.New("job not found")
+		return false, errors.New("job not found")
+	}
+	if job.PagesCrawled >= max {
+		return false, errors.New("max pages reached")
 	}
 	job.PagesCrawled++
 	job.UpdatedAt = time.Now()
 
-	return nil
+	return true, nil
 }

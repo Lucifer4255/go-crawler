@@ -6,22 +6,42 @@ import (
 	"go-crawler/internal/model"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-type Engine struct {
-	workerCount int
-	client      *http.Client
+// PagesCrawledLimiter is used by the engine to check and increment page count under a limit.
+// Implemented by the service layer (e.g. adapter over JobStore).
+type PagesCrawledLimiter interface {
+	TryIncrementPagesCrawled(jobID string, maxPages int) (allowed bool, err error)
 }
 
-func NewEngine(workerCount int) *Engine {
+// PageWriter is used by the engine to persist crawled pages.
+// Implemented by the service layer (e.g. adapter over PageStore).
+type PageWriter interface {
+	CreatePage(page *model.Page) error
+}
+
+type Engine struct {
+	workerCount   int
+	client        *http.Client
+	allowedHost   string
+	pagesLimiter  PagesCrawledLimiter
+	pageWriter    PageWriter
+}
+
+func NewEngine(workerCount int, pagesLimiter PagesCrawledLimiter, pageWriter PageWriter) *Engine {
 	return &Engine{
-		workerCount: workerCount,
+		workerCount:  workerCount,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+		pagesLimiter: pagesLimiter,
+		pageWriter:   pageWriter,
 	}
 }
 
@@ -49,6 +69,11 @@ func (e *Engine) Start(ctx context.Context, job *model.CrawlJob) error {
 	var activeCount atomic.Int32
 	activeCount.Store(1) // Seed task we're about to enqueue
 
+	seedUrl, err := url.Parse(job.Input.StartURL)
+	if err != nil {
+		return fmt.Errorf("invalid start URL: %w", err)
+	}
+	e.allowedHost = seedUrl.Host
 	// Seed initial URL
 	urlQueue <- &model.URLTask{
 		URL:   job.Input.StartURL,
@@ -93,7 +118,7 @@ func (e *Engine) processTask(ctx context.Context, urlQueue chan *model.URLTask, 
 	}
 
 	fmt.Println("Fetching:", task.URL)
-	// TODO Lesson 2: HTTP fetch
+	// -------------------------HTTP FETCH --------------------------
 
 	req, err := http.NewRequestWithContext(ctx, "GET", task.URL, nil)
 	if err != nil {
@@ -120,10 +145,72 @@ func (e *Engine) processTask(ctx context.Context, urlQueue chan *model.URLTask, 
 		return
 	}
 	fmt.Println("Fetched:", task.URL, "with status:", resp.StatusCode, "and body length:", len(body))
-	// TODO Lesson 3: Extract links, enqueue with activeCount.Add(int32(len(links)))
-	// TODO Lesson 4: Check MaxDepth, MaxPages
-	// TODO Lesson 5: Save Page to PageStore
-	_ = task
-	_ = job
-	_ = ctx
+
+	// -------------------------MAX PAGES CHECK --------------------------
+
+	allowed, err := e.pagesLimiter.TryIncrementPagesCrawled(job.ID, job.Input.MaxPages)
+	if err != nil {
+		fmt.Println("Error incrementing pages crawled:", err)
+		return
+	}
+	if !allowed {
+		fmt.Println("Max pages reached:", job.Input.MaxPages)
+		return
+	}
+
+	// -------------------------PARSE PAGE --------------------------
+	parsedPage, err := ParsePage(task.URL, body)
+	if err != nil {
+		fmt.Println("Error parsing page:", err)
+		return
+	}
+
+	// -------------------------SAVE PAGE --------------------------
+	page := &model.Page{
+		ID:           uuid.New().String(),
+		JobID:        job.ID,
+		URL:          task.URL,
+		Title:        parsedPage.Title,
+		Content:      string(body),
+		DiscoveredAt: time.Now(),
+	}
+	if err := e.pageWriter.CreatePage(page); err != nil {
+		fmt.Println("Error saving page:", err)
+		return
+	}
+
+	// -------------------------MAX DEPTH CHECK --------------------------
+
+	if task.Depth >= job.Input.MaxDepth {
+		fmt.Println("Max depth reached:", task.Depth)
+		return
+	}
+	// -------------------------LINK EXTRACTION --------------------------
+
+	fmt.Println("Extracted links:", parsedPage.Links)
+	for _, link := range parsedPage.Links {
+		if ctx.Err() != nil {
+			return
+		}
+
+		childUrl, err := url.Parse(link)
+		if err != nil {
+			fmt.Println("Error parsing link:", err)
+			continue
+		}
+		if childUrl.Host != e.allowedHost {
+			fmt.Println("Skipping external link:", link)
+			continue
+		}
+		visited := visitedURL.MarkIfNotVisited(link)
+		if visited {
+			fmt.Println("Enqueuing:", link)
+			activeCount.Add(1)
+			urlQueue <- &model.URLTask{
+				URL:   link,
+				Depth: task.Depth + 1,
+			}
+		}
+	}
+
 }

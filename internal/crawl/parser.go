@@ -8,7 +8,13 @@ import (
 	"golang.org/x/net/html"
 )
 
-func ExtractLinks(baseURL string, body []byte) ([]string, error) {
+type ParsedPage struct {
+	Title string
+	Links []string
+}
+
+func ParsePage(baseURL string, body []byte) (*ParsedPage, error) {
+
 	doc, err := html.Parse(bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -19,9 +25,22 @@ func ExtractLinks(baseURL string, body []byte) ([]string, error) {
 		return nil, err
 	}
 
-	var links []string
-	var visitNode func(*html.Node)
-	visitNode = func(n *html.Node) {
+	var (
+		title string
+		links []string
+	)
+
+	var walker func(*html.Node)
+	walker = func(n *html.Node) {
+
+		// Title extraction
+		if n.Type == html.ElementNode && n.Data == "title" {
+			if n.FirstChild != nil {
+				title = strings.TrimSpace(n.FirstChild.Data)
+			}
+		}
+
+		// Link extraction
 		if n.Type == html.ElementNode && n.Data == "a" {
 			for _, attr := range n.Attr {
 				if attr.Key == "href" {
@@ -29,22 +48,30 @@ func ExtractLinks(baseURL string, body []byte) ([]string, error) {
 					if href == "" {
 						continue
 					}
-					link, err := url.Parse(href)
+
+					ref, err := url.Parse(href)
 					if err != nil {
 						continue
 					}
-					absoluteURL := base.ResolveReference(link)
-					if absoluteURL.Scheme == "http" || absoluteURL.Scheme == "https" {
-						links = append(links, absoluteURL.String())
+
+					absolute := base.ResolveReference(ref)
+
+					if absolute.Scheme == "http" || absolute.Scheme == "https" {
+						links = append(links, absolute.String())
 					}
 				}
 			}
 		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			visitNode(c)
-		}
 
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walker(c)
+		}
 	}
-	visitNode(doc)
-	return links, nil
+
+	walker(doc)
+
+	return &ParsedPage{
+		Title: title,
+		Links: links,
+	}, nil
 }
