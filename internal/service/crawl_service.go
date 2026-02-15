@@ -106,8 +106,12 @@ func (s *CrawlService) Submit(ctx context.Context, input model.CrawlInput) (*mod
 	if err := s.jobs.UpdateJobStatus(job.ID, model.CrawlStatusRunning, ""); err != nil {
 		return nil, err
 	}
+	// Run crawl with a background context so it continues after the HTTP response is sent.
+	// The request context is cancelled when the client gets the response, which would
+	// stop the crawl immediately and produce 0 pages / no logs.
 	go func() {
-		err := s.runner.Start(ctx, job)
+		crawlCtx := context.Background()
+		err := s.runner.Start(crawlCtx, job)
 		if err != nil {
 			_ = s.jobs.UpdateJobStatus(job.ID, model.CrawlStatusFailed, err.Error())
 		} else {

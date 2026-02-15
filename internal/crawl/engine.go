@@ -27,16 +27,16 @@ type PageWriter interface {
 }
 
 type Engine struct {
-	workerCount   int
-	client        *http.Client
-	allowedHost   string
-	pagesLimiter  PagesCrawledLimiter
-	pageWriter    PageWriter
+	workerCount  int
+	client       *http.Client
+	allowedHost  string
+	pagesLimiter PagesCrawledLimiter
+	pageWriter   PageWriter
 }
 
 func NewEngine(workerCount int, pagesLimiter PagesCrawledLimiter, pageWriter PageWriter) *Engine {
 	return &Engine{
-		workerCount:  workerCount,
+		workerCount: workerCount,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -51,21 +51,9 @@ func (e *Engine) Start(ctx context.Context, job *model.CrawlJob) error {
 
 	visitedURL := NewVisitedURLStore()
 
-	// -----------------------------------------------------------------------
-	// LESSON 1: Active Task Counter
-	// -----------------------------------------------------------------------
-	// Problem: Workers block on <-urlQueue. We must close the channel when
-	// there's no more work. But WHO closes it? Only one goroutine can close.
-	//
-	// Solution: Track "active" tasks = in queue + being processed.
-	// - activeCount: atomic int32
-	// - Enqueue a task: activeCount++
-	// - Worker finishes a task: activeCount--
-	// - When activeCount hits 0: the LAST worker to decrement closes the channel
-	//
-	// Why atomic? Multiple workers read/write; mutex would work too, but
-	// atomic is simpler for a single counter.
-	// -----------------------------------------------------------------------
+	// Use an atomic counter to track active tasks (queued + in-progress).
+	// Bump up on enqueue, down on finish. When it hits zero, close the queue.
+	// Only one goroutine should close.
 	var activeCount atomic.Int32
 	activeCount.Store(1) // Seed task we're about to enqueue
 
@@ -125,17 +113,20 @@ func (e *Engine) processTask(ctx context.Context, urlQueue chan *model.URLTask, 
 		fmt.Println("Error creating request:", err)
 		return
 	}
+	// Many sites (golang.org, go.dev, google.com) return 403 or redirect for default "Go-http-client/1.1"
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 	resp, err := e.client.Do(req)
 	if err != nil {
-		fmt.Println("Error fetching URL:", err)
+		fmt.Println("[crawl] Error fetching URL:", err)
 		return
 	}
 	defer resp.Body.Close()
 
+	fmt.Println("[crawl] Response status:", resp.StatusCode, "for", task.URL)
 	//only continue if the response is OK
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println("Not OK response", resp.StatusCode)
+		fmt.Println("[crawl] Skipping: not OK", resp.StatusCode)
 		return
 	}
 
@@ -150,18 +141,18 @@ func (e *Engine) processTask(ctx context.Context, urlQueue chan *model.URLTask, 
 
 	allowed, err := e.pagesLimiter.TryIncrementPagesCrawled(job.ID, job.Input.MaxPages)
 	if err != nil {
-		fmt.Println("Error incrementing pages crawled:", err)
+		fmt.Println("[crawl] Error incrementing pages crawled:", err)
 		return
 	}
 	if !allowed {
-		fmt.Println("Max pages reached:", job.Input.MaxPages)
+		fmt.Println("[crawl] Max pages reached:", job.Input.MaxPages)
 		return
 	}
 
 	// -------------------------PARSE PAGE --------------------------
 	parsedPage, err := ParsePage(task.URL, body)
 	if err != nil {
-		fmt.Println("Error parsing page:", err)
+		fmt.Println("[crawl] Error parsing page:", err)
 		return
 	}
 
@@ -175,9 +166,10 @@ func (e *Engine) processTask(ctx context.Context, urlQueue chan *model.URLTask, 
 		DiscoveredAt: time.Now(),
 	}
 	if err := e.pageWriter.CreatePage(page); err != nil {
-		fmt.Println("Error saving page:", err)
+		fmt.Println("[crawl] Error saving page:", err)
 		return
 	}
+	fmt.Println("[crawl] Saved page:", page.URL, "job:", job.ID)
 
 	// -------------------------MAX DEPTH CHECK --------------------------
 
