@@ -16,7 +16,7 @@ func main() {
 	jobAdapter := service.NewJobStoreAdapter(jobStore)
 	pageAdapter := service.NewPageStoreAdapter(pageStore)
 
-	engine := crawl.NewEngine(4, jobAdapter, pageAdapter)
+	engine := crawl.NewEngine(10, jobAdapter, pageAdapter)
 	svc := service.NewCrawlService(jobAdapter, pageAdapter, engine)
 
 	httpServer := httppkg.NewServer(svc)
