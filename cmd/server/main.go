@@ -1,25 +1,44 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os"
 
 	"go-crawler/internal/crawl"
+	"go-crawler/internal/crawl/search"
 	httppkg "go-crawler/internal/http"
+	"go-crawler/internal/repository"
 	"go-crawler/internal/service"
-	"go-crawler/internal/store"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	jobStore := store.NewJobStore()
-	pageStore := store.NewPageStore()
+	_ = godotenv.Load() // load .env if present; ignore error so prod can rely on real env
+	ctx := context.Background()
+	repo, err := repository.New(ctx, func() string {
+		dbURL := os.Getenv("DATABASE_URL")
+		if dbURL == "" {
+			log.Fatalf("DATABASE_URL is not set")
+		}
+		return dbURL
+	}())
+	if err != nil {
+		log.Fatalf("Failed to create repository: %v", err)
+	}
+	defer repo.Close(ctx)
+	index := search.NewIndex()
+	pages, err := repo.ListPagesForIndex(ctx)
+	if err != nil {
+		log.Fatalf("Failed to list pages for index: %v", err)
+	}
+	index.BuildFromDocuments(pages)
+	log.Println("Index built with", len(pages), "documents")
+	engine := crawl.NewEngine(10, repo, repo)
+	svc := service.NewCrawlService(repo, repo, engine)
 
-	jobAdapter := service.NewJobStoreAdapter(jobStore)
-	pageAdapter := service.NewPageStoreAdapter(pageStore)
-
-	engine := crawl.NewEngine(10, jobAdapter, pageAdapter)
-	svc := service.NewCrawlService(jobAdapter, pageAdapter, engine)
-
-	httpServer := httppkg.NewServer(svc)
+	httpServer := httppkg.NewServer(svc, index)
 	log.Println("Starting server on port 8080")
 	log.Fatal(httpServer.Start(":8080"))
 }

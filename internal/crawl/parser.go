@@ -9,8 +9,9 @@ import (
 )
 
 type ParsedPage struct {
-	Title string
-	Links []string
+	Title       string
+	Links       []string
+	TextContent string
 }
 
 func ParsePage(baseURL string, body []byte) (*ParsedPage, error) {
@@ -26,8 +27,9 @@ func ParsePage(baseURL string, body []byte) (*ParsedPage, error) {
 	}
 
 	var (
-		title string
-		links []string
+		title       string
+		links       []string
+		textContent string
 	)
 
 	var walker func(*html.Node)
@@ -63,6 +65,17 @@ func ParsePage(baseURL string, body []byte) (*ParsedPage, error) {
 			}
 		}
 
+		// Text content extraction
+		if n.Type == html.TextNode {
+			s := strings.TrimSpace(n.Data)
+			if s != "" {
+				if textContent != "" {
+					textContent += " "
+				}
+				textContent += s
+			}
+		}
+
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walker(c)
 		}
@@ -71,7 +84,8 @@ func ParsePage(baseURL string, body []byte) (*ParsedPage, error) {
 	walker(doc)
 
 	return &ParsedPage{
-		Title: title,
-		Links: links,
+		Title:       title,
+		Links:       links,
+		TextContent: strings.TrimSpace(textContent),
 	}, nil
 }

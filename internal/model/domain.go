@@ -26,7 +26,7 @@ type CrawlJob struct {
 	Status CrawlStatus
 
 	PagesCrawled int
-	Error        error
+	Error        string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -38,15 +38,16 @@ type URLTask struct {
 }
 
 type Page struct {
-	ID           string
-	JobID        string
-	URL          string
-	Title        string
-	Content      string
-	DiscoveredAt time.Time
+	ID          int
+	JobID       string
+	URL         string
+	Title       string
+	Html        string
+	TextContent string
+	FetchedAt   time.Time
 }
 
-type IndexEntry struct {
-	Term   string
-	PageID string
-}
+// type IndexEntry struct {
+// 	Term   string
+// 	PageID string
+// }

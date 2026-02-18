@@ -10,20 +10,18 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // PagesCrawledLimiter is used by the engine to check and increment page count under a limit.
-// Implemented by the service layer (e.g. adapter over JobStore).
+// Implemented by the service layer (e.g. adapter over JobRepository).
 type PagesCrawledLimiter interface {
-	TryIncrementPagesCrawled(jobID string, maxPages int) (allowed bool, err error)
+	TryIncrementPagesCrawled(ctx context.Context, jobID string, maxPages int) (allowed bool, err error)
 }
 
 // PageWriter is used by the engine to persist crawled pages.
-// Implemented by the service layer (e.g. adapter over PageStore).
+// Implemented by the service layer (e.g. adapter over PageRepository).
 type PageWriter interface {
-	CreatePage(page *model.Page) error
+	CreatePage(ctx context.Context, page *model.Page) error
 }
 
 type Engine struct {
@@ -139,7 +137,7 @@ func (e *Engine) processTask(ctx context.Context, urlQueue chan *model.URLTask, 
 
 	// -------------------------MAX PAGES CHECK --------------------------
 
-	allowed, err := e.pagesLimiter.TryIncrementPagesCrawled(job.ID, job.Input.MaxPages)
+	allowed, err := e.pagesLimiter.TryIncrementPagesCrawled(ctx, job.ID, job.Input.MaxPages)
 	if err != nil {
 		fmt.Println("[crawl] Error incrementing pages crawled:", err)
 		return
@@ -158,14 +156,15 @@ func (e *Engine) processTask(ctx context.Context, urlQueue chan *model.URLTask, 
 
 	// -------------------------SAVE PAGE --------------------------
 	page := &model.Page{
-		ID:           uuid.New().String(),
-		JobID:        job.ID,
-		URL:          task.URL,
-		Title:        parsedPage.Title,
-		Content:      string(body),
-		DiscoveredAt: time.Now(),
+		ID:          0, // repo assigns ID on persist
+		JobID:       job.ID,
+		URL:         task.URL,
+		Title:       parsedPage.Title,
+		Html:        string(body),
+		TextContent: parsedPage.TextContent,
+		FetchedAt:   time.Now(),
 	}
-	if err := e.pageWriter.CreatePage(page); err != nil {
+	if err := e.pageWriter.CreatePage(ctx, page); err != nil {
 		fmt.Println("[crawl] Error saving page:", err)
 		return
 	}

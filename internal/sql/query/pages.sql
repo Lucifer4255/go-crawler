@@ -11,3 +11,6 @@ RETURNING *;
 
 -- name: GetPagesByJobID :many
 SELECT * FROM pages WHERE job_id = sqlc.arg(job_id);
+
+-- name: ListPagesForIndex :many
+SELECT id,title, text_content FROM pages;

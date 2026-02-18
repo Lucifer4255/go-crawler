@@ -43,6 +43,36 @@ func (q *Queries) GetPagesByJobID(ctx context.Context, jobID pgtype.UUID) ([]Pag
 	return items, nil
 }
 
+const listPagesForIndex = `-- name: ListPagesForIndex :many
+SELECT id,title, text_content FROM pages
+`
+
+type ListPagesForIndexRow struct {
+	ID          int32       `json:"id"`
+	Title       pgtype.Text `json:"title"`
+	TextContent string      `json:"text_content"`
+}
+
+func (q *Queries) ListPagesForIndex(ctx context.Context) ([]ListPagesForIndexRow, error) {
+	rows, err := q.db.Query(ctx, listPagesForIndex)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPagesForIndexRow
+	for rows.Next() {
+		var i ListPagesForIndexRow
+		if err := rows.Scan(&i.ID, &i.Title, &i.TextContent); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertPage = `-- name: UpsertPage :one
 INSERT INTO pages (job_id, url, title, html, text_content)
 VALUES ($1, $2, $3, $4, $5)

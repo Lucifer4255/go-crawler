@@ -41,7 +41,7 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, err := s.service.GetJob(id)
+	job, err := s.service.GetJob(r.Context(), id)
 	if err != nil {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
@@ -64,7 +64,7 @@ func (s *Server) handleGetPages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pages, err := s.service.GetPagesByJobID(id)
+	pages, err := s.service.GetPagesByJobID(r.Context(), id)
 	if err != nil {
 		http.Error(w, "pages not found", http.StatusNotFound)
 		return
@@ -73,4 +73,23 @@ func (s *Server) handleGetPages(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(pages)
+}
+
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query().Get("query")
+	if query == "" {
+		http.Error(w, "Query is required", http.StatusBadRequest)
+		return
+	}
+
+	results := s.index.Search(query)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(results)
 }

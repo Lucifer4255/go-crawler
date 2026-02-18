@@ -15,6 +15,7 @@ type Querier interface {
 	GetAllJobs(ctx context.Context) ([]Job, error)
 	GetJob(ctx context.Context, id pgtype.UUID) (Job, error)
 	GetPagesByJobID(ctx context.Context, jobID pgtype.UUID) ([]Page, error)
+	ListPagesForIndex(ctx context.Context) ([]ListPagesForIndexRow, error)
 	TryIncrementPagesCrawled(ctx context.Context, arg TryIncrementPagesCrawledParams) (Job, error)
 	UpdateJobStatus(ctx context.Context, arg UpdateJobStatusParams) (Job, error)
 	UpsertPage(ctx context.Context, arg UpsertPageParams) (Page, error)
