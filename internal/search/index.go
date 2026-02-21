@@ -9,10 +9,10 @@ import (
 )
 
 type Index struct {
-	mu       sync.RWMutex
-	entries  map[string]map[int]int // term -> document ID -> count
-	docLen   map[int]int            // document ID -> total token count
-	totalDocs int                   // number of documents indexed
+	mu        sync.RWMutex
+	entries   map[string]map[int]int // term -> document ID -> count
+	docLen    map[int]int            // document ID -> total token count
+	totalDocs int                    // number of documents indexed
 }
 
 func NewIndex() *Index {
