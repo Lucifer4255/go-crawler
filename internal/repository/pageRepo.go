@@ -3,9 +3,9 @@ package repository
 import (
 	"context"
 
-	"go-crawler/internal/crawl/search"
 	"go-crawler/internal/db"
 	"go-crawler/internal/model"
+	"go-crawler/internal/search"
 	"go-crawler/internal/service"
 
 	"github.com/google/uuid"

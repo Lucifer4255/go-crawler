@@ -6,9 +6,9 @@ import (
 	"os"
 
 	"go-crawler/internal/crawl"
-	"go-crawler/internal/crawl/search"
 	httppkg "go-crawler/internal/http"
 	"go-crawler/internal/repository"
+	"go-crawler/internal/search"
 	"go-crawler/internal/service"
 
 	"github.com/joho/godotenv"
@@ -35,7 +35,8 @@ func main() {
 	}
 	index.BuildFromDocuments(pages)
 	log.Println("Index built with", len(pages), "documents")
-	engine := crawl.NewEngine(10, repo, repo)
+	pageRepositoryWriter := service.NewIndexingWriter(repo, index)
+	engine := crawl.NewEngine(10, repo, pageRepositoryWriter)
 	svc := service.NewCrawlService(repo, repo, engine)
 
 	httpServer := httppkg.NewServer(svc, index)

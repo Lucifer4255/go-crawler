@@ -1,7 +1,7 @@
 package http
 
 import (
-	"go-crawler/internal/crawl/search"
+	"go-crawler/internal/search"
 	"go-crawler/internal/service"
 	"net/http"
 )

@@ -106,3 +106,27 @@ func (i *Index) Search(query string) []SearchResult {
 	})
 	return results
 }
+
+func (i *Index) AddDocument(document Document) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	_, isReplace := i.docLen[document.ID]
+	if isReplace {
+		delete(i.docLen, document.ID)
+		for _, postings := range i.entries {
+			delete(postings, document.ID)
+		}
+	}
+	if !isReplace {
+		i.totalDocs++
+	}
+	terms := i.Tokenize(document.Text)
+	i.docLen[document.ID] = len(terms)
+	for _, term := range terms {
+		if _, ok := i.entries[term]; !ok {
+			i.entries[term] = make(map[int]int)
+		}
+		i.entries[term][document.ID]++
+	}
+
+}
