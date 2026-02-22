@@ -39,7 +39,7 @@ func main() {
 	engine := crawl.NewEngine(10, repo, pageRepositoryWriter)
 	svc := service.NewCrawlService(repo, repo, engine)
 
-	httpServer := httppkg.NewServer(svc, index)
+	httpServer := httppkg.NewServer(svc, index, repo)
 	log.Println("Starting server on port 8080")
 	log.Fatal(httpServer.Start(":8080"))
 }

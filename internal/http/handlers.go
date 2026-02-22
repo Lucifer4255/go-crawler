@@ -93,3 +93,18 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(results)
 }
+
+func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	pages, err := s.Repository.ListPagesForIndex(r.Context())
+	if err != nil {
+		http.Error(w, "Failed to list pages for index", http.StatusInternalServerError)
+		return
+	}
+	s.index.BuildFromDocuments(pages)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(pages)
+}
